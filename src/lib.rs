@@ -1,63 +1,69 @@
 #![feature(trace_macros)]
+
+#[macro_use] extern crate enum_primitive;
 pub mod signals {
     extern crate libc;
-    use std::os;
+    extern crate num;
+    extern crate nix;
+    use self::nix::errno::errno;
     use std::mem;
 
-    #[derive(Hash, Eq, PartialEq, Copy, Debug, FromPrimitive)]
-    pub enum Signal {
-        None = 0,
-        Hup,
-        Int,
-        Quit,
-        Ill,
-        Trap,
-        Abrt,
-        Bus,
-        Fpe,
-        Kill,
-        Usr1,
-        Segv,
-        Usr2,
-        Pipe,
-        Alrm,
-        Term,
-        StkFlt,
-        Chld,
-        Cont,
-        Stop,
-        Tstp,
-        Ttin,
-        Ttou,
-        Urg,
-        XCpu,
-        Xfsz,
-        Vtalrm,
-        Prof,
-        Winch,
-        Io,
-        Pwr,
-        Sys
+    enum_from_primitive! {
+        #[derive(Hash, Eq, PartialEq, Debug, Copy, Clone)]
+        pub enum Signal {
+            None = 0,
+            Hup,
+            Int,
+            Quit,
+            Ill,
+            Trap,
+            Abrt,
+            Bus,
+            Fpe,
+            Kill,
+            Usr1,
+            Segv,
+            Usr2,
+            Pipe,
+            Alrm,
+            Term,
+            StkFlt,
+            Chld,
+            Cont,
+            Stop,
+            Tstp,
+            Ttin,
+            Ttou,
+            Urg,
+            XCpu,
+            Xfsz,
+            Vtalrm,
+            Prof,
+            Winch,
+            Io,
+            Pwr,
+            Sys
+        }
     }
 
     impl Signal {
         pub fn raise(self) -> Result<(), usize> {
             match unsafe { raise(self as libc::c_int) } {
                 0 => Result::Ok(()),
-                _ => Result::Err(os::errno())
+                _ => Result::Err(errno() as usize)
             }
         }
 
         pub fn kill(self, pid: libc::pid_t) -> Result<(), usize> {
             match unsafe { kill(pid, self as libc::c_int) } {
                 0 => Result::Ok(()),
-                _ => Result::Err(os::errno())
+                _ => Result::Err(errno() as usize)
             }
         }
 
         pub unsafe fn handle(self, handler: Box<FnMut(Signal)>) -> Result<(), usize> {
-            match unsafe { signal (self as libc::c_int, mem::transmute(glue::rust_signal_handler)) } {
-                -1 => Result::Err(os::errno()),
+            match signal (self as libc::c_int, mem::transmute(glue::rust_signal_handler)) {
+                -1 => Result::Err(errno() as usize),
                 _ => { glue::set_handler(self, handler); Result::Ok(()) }
             }
         }
@@ -65,15 +71,12 @@ pub mod signals {
 
     mod glue {
         extern crate libc;
-        extern crate alloc;
+        extern crate num;
         use super::Signal;
-        use std::num::FromPrimitive;
-        use self::alloc::arc::Arc;
-        use std::rc::Rc;
+        use self::num::FromPrimitive;
         use std::mem;
-        use std::ptr;
 
-        #[derive(Copy,Debug)]
+        #[derive(Debug,Copy,Clone)]
         struct FnPtr {
             foo: usize,
             bar: usize
@@ -104,7 +107,7 @@ pub mod signals {
             handlers[sig as usize] = mem::transmute(f);
         }
 
-        fn null_handler(s: Signal) {}
+        //fn null_handler(s: Signal) {}
 
         pub unsafe extern "C" fn rust_signal_handler(sig: libc::c_int) {
             let f: *mut FnMut(Signal) = mem::transmute(handlers[sig as usize]);
