@@ -1,5 +1,3 @@
-#![feature(trace_macros)]
-
 #[macro_use] extern crate enum_primitive;
 pub mod signals {
     extern crate libc;
